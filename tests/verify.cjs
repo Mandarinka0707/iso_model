@@ -1,0 +1,38 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path');
+const M=require('../model.js'),V=require('../visuals.js');
+const range=V.lineBounds([[.5795,.5799]],{mode:'auto'});
+assert.ok(range.max-range.min<.001,'Auto scale must reveal small differences');
+assert.ok(range.min<.5795&&range.max>.5799);
+const constant=V.lineBounds([[.5,.5]],{mode:'auto'});
+assert.ok(constant.min<.5&&constant.max>.5);
+assert.deepEqual(V.lineBounds([[.2,.3]],{mode:'unit'}),{min:0,max:1});
+assert.throws(()=>V.lineBounds([[.5]],{mode:'manual',min:1,max:0}));
+assert.throws(()=>V.lineBounds([[.5]],{mode:'manual',min:NaN,max:1}));
+assert.throws(()=>V.lineBounds([[.5]],{mode:'manual',min:-1e308,max:1e308}));
+const outside=V.lineBounds([[-.3,1.8]],{mode:'auto'});
+assert.ok(outside.min<-.3&&outside.max>1.8);
+const expected=[.5022683829928338,.5926298249025377,.49449603400850467,.5663896460350379,.9325573679931765];
+for(let i=0;i<5;i++){
+ const r=M.simulate(M.makeConfig(i));
+ assert.ok(Math.abs(r.final[0]-expected[i])<1e-12);
+ const window=V.timeWindow(r,.113,2.777);
+ assert.equal(window.times[0],.113);assert.equal(window.times.at(-1),2.777);
+ assert.deepEqual(window.values[0],M.sample(r,.113));
+ assert.deepEqual(window.values.at(-1),M.sample(r,2.777));
+ assert.throws(()=>V.timeWindow(r,2,1));
+ const series=M.ids.map((id,j)=>({id,color:'#2863ae',values:window.values.map(row=>row[j])}));
+ const svg=V.lineChartSVG(series,window.times,{scale:'auto',chartId:'test-'+i});
+ assert.equal((svg.match(/data-series-id=/g)||[]).length,25);
+ assert.ok(svg.includes('clipPath'));
+ assert.ok(!/NaN|Infinity/.test(svg));
+ assert.ok(svg.includes('uᵢ(t)'));
+ assert.equal(V.snapshots(r).length,5);
+}
+const series=[{id:7,color:'#123456',values:[.5795,.5799]}];
+const svg=V.lineChartSVG(series,[0,3],{scale:'manual',min:.5794,max:.58,chartId:'zoom'});
+const d=svg.match(/data-series-id="7" d="([^"]+)"/)[1];
+const points=Array.from(d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g),m=>[+m[1],+m[2]]);
+assert.ok(Math.abs(points[1][1]-points[0][1])>100,'Manual zoom must visibly separate .0004');
+assert.ok(V.lineChartSVG(series,[0,3],{scale:'auto',width:560,height:235,chartId:'small'}).includes('viewBox="0 0 560 235"'));
+console.log('PASS: auto/unit/manual Y, small differences, constant series, time window, 25 SVG curves, unchanged five scenarios, five radars.');
